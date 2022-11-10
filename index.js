@@ -5,6 +5,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { query } = require("express");
 const app = express();
 const port = process.env.PORT || 5000;
+const jwt = require('jsonwebtoken');
 
 
 // MIDDLEWARES
@@ -26,6 +27,31 @@ async function mongoDbRun() {
     try {
         const servicecollection = client.db("servicesCollection").collection("services");
         const reviewsCollection = client.db("servicesCollection").collection("reviews");
+        app.post("/jwt", (req, res) => {
+            const user = req.body;
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+            res.send({ token })
+        })
+
+
+        function verifyJwt(req, res, next) {
+
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                res.status(401).send({ message: "unauthorized" })
+            }
+            const token = authHeader.split(' ')[1];
+            jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (err, decoded) {
+                if (err) {
+                    res.status(403).send({ message: "unauthorized" })
+                } else {
+                    req.decoded = decoded;
+                    next();
+                }
+            })
+
+
+        }
 
         //REVIEWS  CREATE ONE OPARATION(C)
         app.post("/reviews", async (req, res) => {
@@ -42,7 +68,7 @@ async function mongoDbRun() {
             res.send(reviews);
         });
         // REVIEWS READ_BY_EMAIL_OPERATION 
-        app.get("/myreviews", async (req, res) => {
+        app.get("/myreviews", verifyJwt, async (req, res) => {
             console.log(req.query.email)
             let query = {};
             if (req.query.email) {
@@ -54,6 +80,42 @@ async function mongoDbRun() {
             const reviews = await cursor.toArray();
             res.send(reviews);
         });
+        // REVIEW_DELETE_OPARATION(D)
+        app.delete("/myreviews/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const result = await reviewsCollection.deleteOne(query);
+            res.send(result);
+        });
+        //RVIEW_ONLY ON DATA
+        app.get("/review/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const review = await reviewsCollection.findOne(query);
+            res.send(review);
+        });
+        //UPDATE OPARATION(U)
+
+        app.put("/review/edit/:id", async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: ObjectId(id) };
+            const review = req.body;
+            const option = { upinsert: true };
+            const updatedUser = {
+                $set: {
+                    description: review.description,
+                    ratings: review.ratings,
+                },
+            };
+            const result = await reviewsCollection.updateOne(
+                filter,
+                updatedUser,
+                option
+            );
+            res.send(result);
+        });
+
+
 
 
         //SERVICES CREATE ONE  OPARATION(C)
