@@ -1,11 +1,12 @@
 const express = require("express");
 const cors = require("cors");
-require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { query } = require("express");
 const app = express();
 const port = process.env.PORT || 5000;
 const jwt = require('jsonwebtoken');
+
+require('dotenv').config()
 
 
 // MIDDLEWARES
@@ -27,30 +28,42 @@ async function mongoDbRun() {
     try {
         const servicecollection = client.db("servicesCollection").collection("services");
         const reviewsCollection = client.db("servicesCollection").collection("reviews");
+
+        //jwt----------------------------------------
+        // REVIEWS READ_BY_EMAIL_OPERATION 
+        app.get("/myreviews", verifyJwt, async (req, res) => {
+            let query = {};
+            if (req.query.email) {
+                query = {
+                    "email": req.query.email
+                }
+            }
+            const cursor = reviewsCollection.find(query);
+            const reviews = await cursor.toArray();
+            res.send(reviews);
+        });
+
+
         app.post("/jwt", (req, res) => {
             const user = req.body;
             const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
             res.send({ token })
         })
-
-
         function verifyJwt(req, res, next) {
 
             const authHeader = req.headers.authorization;
+            console.log(authHeader)
             if (!authHeader) {
                 res.status(401).send({ message: "unauthorized" })
             }
-            const token = authHeader.split(' ')[1];
+            const token = authHeader;
             jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (err, decoded) {
                 if (err) {
                     res.status(403).send({ message: "unauthorized" })
-                } else {
-                    req.decoded = decoded;
-                    next();
                 }
+                req.decoded = decoded;
+                next();
             })
-
-
         }
 
         //REVIEWS  CREATE ONE OPARATION(C)
@@ -67,19 +80,7 @@ async function mongoDbRun() {
             const reviews = await cursor.toArray();
             res.send(reviews);
         });
-        // REVIEWS READ_BY_EMAIL_OPERATION 
-        app.get("/myreviews", verifyJwt, async (req, res) => {
-            console.log(req.query.email)
-            let query = {};
-            if (req.query.email) {
-                query = {
-                    "email": req.query.email
-                }
-            }
-            const cursor = reviewsCollection.find(query);
-            const reviews = await cursor.toArray();
-            res.send(reviews);
-        });
+
         // REVIEW_DELETE_OPARATION(D)
         app.delete("/myreviews/:id", async (req, res) => {
             const id = req.params.id;
@@ -95,7 +96,6 @@ async function mongoDbRun() {
             res.send(review);
         });
         //UPDATE OPARATION(U)
-
         app.put("/review/edit/:id", async (req, res) => {
             const id = req.params.id;
             const filter = { _id: ObjectId(id) };
